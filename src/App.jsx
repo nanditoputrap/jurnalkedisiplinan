@@ -187,6 +187,9 @@ const App = () => {
   };
 
   const syncTimeoutRef = useRef(null);
+  const syncIntervalRef = useRef(null);
+  const lastRemoteUpdatedAtRef = useRef(null);
+  const isSavingRef = useRef(false);
 
   // State Navigasi
   const [currentView, setCurrentView] = useState('home');
@@ -307,6 +310,15 @@ const App = () => {
     }
   };
 
+  const applyRemoteData = (remoteData) => {
+    if (Array.isArray(remoteData?.teachers)) setTeachers(remoteData.teachers);
+    if (Array.isArray(remoteData?.classes)) setClasses(remoteData.classes);
+    if (Array.isArray(remoteData?.students)) setStudents(remoteData.students);
+    if (remoteData?.dailyLogs && typeof remoteData.dailyLogs === 'object' && !Array.isArray(remoteData.dailyLogs)) {
+      setDailyLogs(remoteData.dailyLogs);
+    }
+  };
+
   useEffect(() => {
     let isCancelled = false;
 
@@ -324,6 +336,7 @@ const App = () => {
 
         const result = await response.json();
         const remoteData = result?.data;
+        lastRemoteUpdatedAtRef.current = result?.updatedAt || null;
         setIsRemoteSyncAvailable(true);
 
         if (!remoteData || isCancelled) {
@@ -331,12 +344,7 @@ const App = () => {
           return;
         }
 
-        if (Array.isArray(remoteData.teachers)) setTeachers(remoteData.teachers);
-        if (Array.isArray(remoteData.classes)) setClasses(remoteData.classes);
-        if (Array.isArray(remoteData.students)) setStudents(remoteData.students);
-        if (remoteData.dailyLogs && typeof remoteData.dailyLogs === 'object' && !Array.isArray(remoteData.dailyLogs)) {
-          setDailyLogs(remoteData.dailyLogs);
-        }
+        applyRemoteData(remoteData);
 
         setStorageMode('database');
         setSyncState('saved');
@@ -359,6 +367,9 @@ const App = () => {
       isCancelled = true;
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
+      }
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
       }
     };
   }, []);
@@ -390,6 +401,7 @@ const App = () => {
     syncTimeoutRef.current = setTimeout(async () => {
       try {
         setSyncState('saving');
+        isSavingRef.current = true;
 
         const response = await fetch('/api/state', {
           method: 'PUT',
@@ -408,6 +420,8 @@ const App = () => {
           throw new Error(`Gagal menyimpan ke database (${response.status})`);
         }
 
+        const result = await response.json();
+        lastRemoteUpdatedAtRef.current = result?.updatedAt || null;
         setStorageMode('database');
         setSyncState('saved');
       } catch (error) {
@@ -415,6 +429,8 @@ const App = () => {
         setStorageMode('local');
         setIsRemoteSyncAvailable(false);
         setSyncState('error');
+      } finally {
+        isSavingRef.current = false;
       }
     }, 500);
 
@@ -424,6 +440,52 @@ const App = () => {
       }
     };
   }, [teachers, classes, students, dailyLogs, hasHydratedData, isRemoteSyncAvailable]);
+
+  useEffect(() => {
+    if (!hasHydratedData || !isRemoteSyncAvailable) return;
+
+    const pollRemoteState = async () => {
+      if (isSavingRef.current) return;
+
+      try {
+        const response = await fetch('/api/state', {
+          headers: {
+            Accept: 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Gagal polling database (${response.status})`);
+        }
+
+        const result = await response.json();
+        const remoteUpdatedAt = result?.updatedAt || null;
+        const remoteData = result?.data;
+
+        if (!remoteUpdatedAt || remoteUpdatedAt === lastRemoteUpdatedAtRef.current) {
+          return;
+        }
+
+        lastRemoteUpdatedAtRef.current = remoteUpdatedAt;
+
+        if (remoteData) {
+          applyRemoteData(remoteData);
+          setStorageMode('database');
+          setSyncState('saved');
+        }
+      } catch (error) {
+        console.error('Polling database gagal.', error);
+      }
+    };
+
+    syncIntervalRef.current = setInterval(pollRemoteState, 5000);
+
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+  }, [hasHydratedData, isRemoteSyncAvailable]);
 
 // --- LOGIC FUNCTIONS ---
 const toggleStatus = (studentId, indicatorId) => {
