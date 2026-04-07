@@ -213,6 +213,8 @@ const App = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [editingItem, setEditingItem] = useState(null);
   const [newInput, setNewInput] = useState('');
+  const [newClassName, setNewClassName] = useState('');
+  const [newClassTeacherId, setNewClassTeacherId] = useState('');
 
   const exportBackup = () => {
     const backupData = {
@@ -645,6 +647,41 @@ Tambah
 )}
 
 {adminTab === 'kelas' && (
+<div className="space-y-6">
+<div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 animate-fade-up">
+<h4 className="text-sm font-black text-blue-900 uppercase tracking-wide">Tambah Kelas</h4>
+<p className="text-[10px] text-gray-500 font-medium mt-1">Buat kelas baru, lalu tambah siswa langsung di dalam kartu kelas.</p>
+<div className="grid grid-cols-1 md:grid-cols-[1fr,220px,120px] gap-2 mt-3">
+<input
+type="text"
+placeholder="Contoh: VII A"
+className="bg-gray-50 border border-gray-100 rounded-lg px-4 py-2 text-xs font-bold text-blue-900 outline-none"
+value={newClassName}
+onChange={(e) => setNewClassName(e.target.value)}
+/>
+<select
+className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-xs font-bold text-blue-900 outline-none"
+value={newClassTeacherId}
+onChange={(e) => setNewClassTeacherId(e.target.value)}
+>
+<option value="">Pilih wali kelas</option>
+{teachers.map(teacher => (
+<option key={teacher.id} value={teacher.id}>{teacher.name}</option>
+))}
+</select>
+<button
+onClick={() => {
+handleAddClass(newClassName, newClassTeacherId);
+setNewClassName('');
+setNewClassTeacherId('');
+}}
+className="bg-blue-900 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all hover:-translate-y-0.5 hover:shadow-md"
+>
+Tambah
+</button>
+</div>
+</div>
+
 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 {classes.map(c => (
 <div key={c.id} className="bg-white rounded-2xl shadow-sm overflow-hidden border-t-4 border-blue-900 flex flex-col h-fit animate-fade-up animate-delay-fill hover:-translate-y-1 transition-all" style={getStaggerStyle(classes.findIndex(item => item.id === c.id))}>
@@ -696,7 +733,7 @@ Unggah Batch
 </div>
 ) : (
 <div className="flex gap-1.5">
-<input id={`newName-${c.id}`} className="flex-1 text-[10px] bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 font-bold outline-none" placeholder="Nama..." />
+<input id={`newName-${c.id}`} className="flex-1 text-[10px] bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 font-bold outline-none" placeholder="Nama siswa..." />
 <select id={`newGender-${c.id}`} className="bg-gray-50 border border-gray-100 rounded-lg px-1 font-bold text-[10px]">
 <option value="L">L</option><option value="P">P</option>
 </select>
@@ -708,6 +745,7 @@ Unggah Batch
 </div>
 </div>
 ))}
+</div>
 </div>
 )}
 </div>
