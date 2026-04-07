@@ -180,16 +180,16 @@ const App = () => {
   // Indikator Kedisiplinan (konstan, tidak perlu state)
   const indicators = [
     { id: 'ontime', label: 'Tepat Waktu', color: 'bg-emerald-500' },
-    { id: 'uniform', label: 'Seragam Rapi', color: 'bg-blue-500' },
-    { id: 'shoes', label: 'Sepatu', color: 'bg-indigo-500' },
-    { id: 'hair_ciput', label: 'Ciput/Rambut', color: 'bg-teal-500' },
-    { id: 'socks', label: 'Kaos Kaki', color: 'bg-cyan-500' },
-    { id: 'cleaning', label: 'Kebersihan', color: 'bg-amber-500' },
-    { id: 'no_hp', label: 'Bawa HP', color: 'bg-rose-500' },
-    { id: 'makeup', label: 'Makeup (P)', color: 'bg-pink-500' },
-    { id: 'attitude', label: 'Sopan Santun', color: 'bg-purple-500' },
-    { id: 'orderly', label: 'Tertib Belajar', color: 'bg-violet-500' },
-    { id: 'prayer', label: 'Sholat Tertib', color: 'bg-emerald-600' }
+    { id: 'uniform', label: 'Seragam Rapi', color: 'bg-emerald-500' },
+    { id: 'shoes', label: 'Sepatu', color: 'bg-emerald-500' },
+    { id: 'hair_ciput', label: 'Ciput/Rambut', color: 'bg-emerald-500' },
+    { id: 'socks', label: 'Kaos Kaki', color: 'bg-emerald-500' },
+    { id: 'cleaning', label: 'Kebersihan', color: 'bg-emerald-500' },
+    { id: 'no_hp', label: 'Bawa HP', color: 'bg-emerald-500' },
+    { id: 'makeup', label: 'Makeup (P)', color: 'bg-emerald-500' },
+    { id: 'attitude', label: 'Sopan Santun', color: 'bg-emerald-500' },
+    { id: 'orderly', label: 'Tertib Belajar', color: 'bg-emerald-500' },
+    { id: 'prayer', label: 'Sholat Tertib', color: 'bg-emerald-500' }
   ];
 
   // State Data with localStorage persistence
