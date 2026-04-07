@@ -17,8 +17,8 @@ export default async function handler(req, res) {
 
   if (!isDatabaseConfigured) {
     return res.status(503).json({
-      error: 'Supabase belum dikonfigurasi di Vercel.',
-      hint: 'Set SUPABASE_URL atau NEXT_PUBLIC_SUPABASE_URL, lalu tambahkan SUPABASE_SERVICE_ROLE_KEY.'
+      error: 'Neon belum dikonfigurasi di Vercel.',
+      hint: 'Pastikan DATABASE_URL atau POSTGRES_URL tersedia dari integrasi Neon.'
     });
   }
 
