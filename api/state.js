@@ -130,6 +130,31 @@ export default async function handler(req, res) {
         });
       }
 
+      if (action === 'save-log-entry') {
+        const { logKey, logData } = body;
+
+        if (!logKey || !logData || typeof logData !== 'object' || Array.isArray(logData)) {
+          return res.status(400).json({
+            error: 'Payload simpan jurnal tidak valid.'
+          });
+        }
+
+        const result = await patchAppState((payload) => {
+          return {
+            ...payload,
+            dailyLogs: {
+              ...payload.dailyLogs,
+              [logKey]: logData
+            }
+          };
+        }, snapshot);
+
+        return res.status(200).json({
+          ok: true,
+          updatedAt: result?.updated_at || null
+        });
+      }
+
       return res.status(400).json({
         error: 'Aksi patch tidak dikenali.'
       });

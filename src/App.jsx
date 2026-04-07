@@ -228,6 +228,7 @@ const App = () => {
   const [newInput, setNewInput] = useState('');
   const [newClassName, setNewClassName] = useState('');
   const [newClassTeacherId, setNewClassTeacherId] = useState('');
+  const [journalDirty, setJournalDirty] = useState(false);
 
   const getAppSnapshot = () => ({
     teachers,
@@ -458,7 +459,7 @@ const App = () => {
     if (!hasHydratedData || !isRemoteSyncAvailable) return;
 
     const pollRemoteState = async () => {
-      if (isSavingRef.current) return;
+      if (isSavingRef.current || journalDirty) return;
 
       try {
         const response = await fetch('/api/state', {
@@ -498,7 +499,7 @@ const App = () => {
         clearInterval(syncIntervalRef.current);
       }
     };
-  }, [hasHydratedData, isRemoteSyncAvailable]);
+  }, [hasHydratedData, isRemoteSyncAvailable, journalDirty]);
 
 // --- LOGIC FUNCTIONS ---
 const toggleStatus = (studentId, indicatorId) => {
@@ -517,43 +518,7 @@ const nextDailyLogs = {
 }
 };
 setDailyLogs(nextDailyLogs);
-
-if (isRemoteSyncAvailable) {
-isSavingRef.current = true;
-fetch('/api/state', {
-method: 'PATCH',
-headers: {
-'Content-Type': 'application/json'
-},
-body: JSON.stringify({
-action: 'toggle-indicator',
-logKey,
-studentId,
-indicatorId,
-value: nextValue,
-snapshot: {
-...getAppSnapshot(),
-dailyLogs: nextDailyLogs
-}
-})
-})
-.then(async (response) => {
-if (!response.ok) {
-throw new Error(`Gagal sinkron ceklis (${response.status})`);
-}
-const result = await response.json();
-lastRemoteUpdatedAtRef.current = result?.updatedAt || null;
-setStorageMode('database');
-setSyncState('saved');
-})
-.catch((error) => {
-console.error('Sinkronisasi ceklis gagal.', error);
-setSyncState('error');
-})
-.finally(() => {
-isSavingRef.current = false;
-});
-}
+setJournalDirty(true);
 };
 
 const getStatus = (studentId, indicatorId) => {
@@ -585,41 +550,54 @@ const nextDailyLogs = {
 };
 
 setDailyLogs(nextDailyLogs);
+setJournalDirty(true);
+};
 
-if (isRemoteSyncAvailable) {
+const handleSaveJournal = async () => {
+const logKey = `${selectedDate}_${selectedClassId}`;
+const logData = dailyLogs[logKey] || {};
+
+if (!isRemoteSyncAvailable) {
+alert('Mode database belum aktif. Data hanya tersimpan di browser ini.');
+setCurrentView('home');
+setJournalDirty(false);
+return;
+}
+
+try {
+setSyncState('saving');
 isSavingRef.current = true;
-fetch('/api/state', {
+
+const response = await fetch('/api/state', {
 method: 'PATCH',
 headers: {
 'Content-Type': 'application/json'
 },
 body: JSON.stringify({
-action: 'check-all-indicators',
+action: 'save-log-entry',
 logKey,
-studentId: student.id,
-indicatorIds: applicableIndicators.map(indicator => indicator.id),
-snapshot: {
-...getAppSnapshot(),
-dailyLogs: nextDailyLogs
-}
+logData,
+snapshot: getAppSnapshot()
 })
-})
-.then(async (response) => {
+});
+
 if (!response.ok) {
-throw new Error(`Gagal sinkron cek semua (${response.status})`);
+throw new Error(`Gagal menyimpan jurnal (${response.status})`);
 }
+
 const result = await response.json();
 lastRemoteUpdatedAtRef.current = result?.updatedAt || null;
 setStorageMode('database');
 setSyncState('saved');
-})
-.catch((error) => {
-console.error('Sinkronisasi cek semua gagal.', error);
+setJournalDirty(false);
+alert('Data jurnal berhasil disimpan ke database.');
+setCurrentView('home');
+} catch (error) {
+console.error('Simpan jurnal gagal.', error);
 setSyncState('error');
-})
-.finally(() => {
+alert('Data jurnal gagal disimpan ke database.');
+} finally {
 isSavingRef.current = false;
-});
 }
 };
 
@@ -875,7 +853,7 @@ isActive
 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-white border border-gray-300"></div> Tidak</div>
 </div>
 <button
-onClick={() => { alert("Data tersimpan!"); setCurrentView('home'); }}
+onClick={handleSaveJournal}
 className="bg-blue-900 hover:bg-blue-800 text-white px-10 py-3 rounded-xl text-sm font-black flex items-center gap-2 shadow-md transition-all uppercase hover:-translate-y-1 hover:shadow-xl animate-soft-pulse"
 >
 <Save size={16} /> Simpan
