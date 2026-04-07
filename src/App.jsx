@@ -339,8 +339,14 @@ const App = () => {
         lastRemoteUpdatedAtRef.current = result?.updatedAt || null;
         setIsRemoteSyncAvailable(true);
 
-        if (!remoteData || isCancelled) {
-          setStorageMode('local');
+        if (isCancelled) {
+          return;
+        }
+
+        if (!remoteData) {
+          // Database aktif, tapi belum ada data tersimpan.
+          setStorageMode('database');
+          setSyncState('saved');
           return;
         }
 
