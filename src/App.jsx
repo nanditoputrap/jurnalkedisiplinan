@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
 Users,
 BookOpen,
@@ -156,6 +156,22 @@ const MonthlyReportView = ({ classId, students, classes, teachers, dailyLogs, in
 };
 
 const App = () => {
+  const defaultTeachers = [
+    { id: '1', name: 'Ust. Ahmad Fauzi, S.Pd' },
+    { id: '2', name: 'Ustz. Siti Aminah, M.Pd' }
+  ];
+  const defaultClasses = [
+    { id: '1', name: 'VII A', teacherId: '1' },
+    { id: '2', name: 'VIII B', teacherId: '2' }
+  ];
+  const defaultStudents = [
+    { id: '1', name: 'Ahmad Zaki', classId: '1', gender: 'L' },
+    { id: '2', name: 'Fatimah Az-Zahra', classId: '1', gender: 'P' },
+    { id: '3', name: 'Muhammad Ali', classId: '2', gender: 'L' },
+    { id: '4', name: 'Siti Khadijah', classId: '1', gender: 'P' },
+    { id: '5', name: 'Umar Bin Khattab', classId: '1', gender: 'L' }
+  ];
+
   const getStaggerStyle = (index, step = 70) => ({
     animationDelay: `${index * step}ms`
   });
@@ -169,6 +185,8 @@ const App = () => {
       return defaultValue;
     }
   };
+
+  const syncTimeoutRef = useRef(null);
 
   // State Navigasi
   const [currentView, setCurrentView] = useState('home');
@@ -193,22 +211,14 @@ const App = () => {
   ];
 
   // State Data with localStorage persistence
-  const [teachers, setTeachers] = useState(() => getInitialState('teachers', [
-    { id: '1', name: 'Ust. Ahmad Fauzi, S.Pd' },
-    { id: '2', name: 'Ustz. Siti Aminah, M.Pd' }
-  ]));
-  const [classes, setClasses] = useState(() => getInitialState('classes', [
-    { id: '1', name: 'VII A', teacherId: '1' },
-    { id: '2', name: 'VIII B', teacherId: '2' }
-  ]));
-  const [students, setStudents] = useState(() => getInitialState('students', [
-    { id: '1', name: 'Ahmad Zaki', classId: '1', gender: 'L' },
-    { id: '2', name: 'Fatimah Az-Zahra', classId: '1', gender: 'P' },
-    { id: '3', name: 'Muhammad Ali', classId: '2', gender: 'L' },
-    { id: '4', name: 'Siti Khadijah', classId: '1', gender: 'P' },
-    { id: '5', name: 'Umar Bin Khattab', classId: '1', gender: 'L' }
-  ]));
+  const [teachers, setTeachers] = useState(() => getInitialState('teachers', defaultTeachers));
+  const [classes, setClasses] = useState(() => getInitialState('classes', defaultClasses));
+  const [students, setStudents] = useState(() => getInitialState('students', defaultStudents));
   const [dailyLogs, setDailyLogs] = useState(() => getInitialState('dailyLogs', {}));
+  const [hasHydratedData, setHasHydratedData] = useState(false);
+  const [storageMode, setStorageMode] = useState('local');
+  const [isRemoteSyncAvailable, setIsRemoteSyncAvailable] = useState(false);
+  const [syncState, setSyncState] = useState('idle');
 
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [editingItem, setEditingItem] = useState(null);
@@ -297,6 +307,62 @@ const App = () => {
     }
   };
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadRemoteState = async () => {
+      try {
+        const response = await fetch('/api/state', {
+          headers: {
+            Accept: 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Gagal memuat data database (${response.status})`);
+        }
+
+        const result = await response.json();
+        const remoteData = result?.data;
+        setIsRemoteSyncAvailable(true);
+
+        if (!remoteData || isCancelled) {
+          setStorageMode('local');
+          return;
+        }
+
+        if (Array.isArray(remoteData.teachers)) setTeachers(remoteData.teachers);
+        if (Array.isArray(remoteData.classes)) setClasses(remoteData.classes);
+        if (Array.isArray(remoteData.students)) setStudents(remoteData.students);
+        if (remoteData.dailyLogs && typeof remoteData.dailyLogs === 'object' && !Array.isArray(remoteData.dailyLogs)) {
+          setDailyLogs(remoteData.dailyLogs);
+        }
+
+        setStorageMode('database');
+        setSyncState('saved');
+      } catch (error) {
+        console.error('Mode database belum aktif, pakai localStorage.', error);
+        if (!isCancelled) {
+          setStorageMode('local');
+          setIsRemoteSyncAvailable(false);
+        }
+      } finally {
+        if (!isCancelled) {
+          setHasHydratedData(true);
+        }
+      }
+    };
+
+    loadRemoteState();
+
+    return () => {
+      isCancelled = true;
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Effects to save data to localStorage on change
   useEffect(() => {
     localStorage.setItem('teachers', JSON.stringify(teachers));
@@ -313,6 +379,51 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('dailyLogs', JSON.stringify(dailyLogs));
   }, [dailyLogs]);
+
+  useEffect(() => {
+    if (!hasHydratedData || !isRemoteSyncAvailable) return;
+
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+
+    syncTimeoutRef.current = setTimeout(async () => {
+      try {
+        setSyncState('saving');
+
+        const response = await fetch('/api/state', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            teachers,
+            classes,
+            students,
+            dailyLogs
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Gagal menyimpan ke database (${response.status})`);
+        }
+
+        setStorageMode('database');
+        setSyncState('saved');
+      } catch (error) {
+        console.error('Sinkronisasi database gagal, data tetap aman di localStorage.', error);
+        setStorageMode('local');
+        setIsRemoteSyncAvailable(false);
+        setSyncState('error');
+      }
+    }, 500);
+
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, [teachers, classes, students, dailyLogs, hasHydratedData, isRemoteSyncAvailable]);
 
 // --- LOGIC FUNCTIONS ---
 const toggleStatus = (studentId, indicatorId) => {
@@ -334,6 +445,29 @@ setDailyLogs({
 const getStatus = (studentId, indicatorId) => {
 const logKey = `${selectedDate}_${selectedClassId}`;
 return dailyLogs[logKey]?.[studentId]?.[indicatorId] || false;
+};
+
+const getApplicableIndicators = (student) => {
+return indicators.filter(ind => !(ind.id === 'makeup' && student.gender === 'L'));
+};
+
+const handleCheckAllStudent = (student) => {
+const logKey = `${selectedDate}_${selectedClassId}`;
+const currentLogs = dailyLogs[logKey] || {};
+const studentLogs = currentLogs[student.id] || {};
+const nextStudentLogs = { ...studentLogs };
+
+getApplicableIndicators(student).forEach(indicator => {
+nextStudentLogs[indicator.id] = true;
+});
+
+setDailyLogs({
+...dailyLogs,
+[logKey]: {
+...currentLogs,
+[student.id]: nextStudentLogs
+}
+});
 };
 
 const handleAddTeacher = (name) => {
@@ -431,6 +565,17 @@ className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold
 
 <div className="flex items-center gap-3">
 <span className="text-[10px] font-bold opacity-80 hidden md:block">{new Date().toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+<span className={`hidden md:inline-flex items-center rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
+storageMode === 'database'
+? 'bg-emerald-100 text-emerald-700'
+: 'bg-amber-100 text-amber-700'
+}`}>
+{storageMode === 'database'
+? syncState === 'saving'
+  ? 'Sync DB'
+  : 'DB Aktif'
+: 'Mode Lokal'}
+</span>
 <button
 onClick={exportBackup}
 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold border border-blue-800 bg-blue-900/40 hover:bg-blue-800 text-blue-100"
@@ -515,7 +660,7 @@ return (
 <table className="w-full text-left border-collapse text-[10px]">
 <thead className="bg-blue-900 text-white sticky top-0 z-30">
 <tr>
-<th className="px-4 py-3 font-bold border-r border-blue-800 sticky left-0 bg-blue-900 z-40 w-48 uppercase tracking-widest shadow-md">Nama Siswa</th>
+<th className="px-4 py-3 font-bold border-r border-blue-800 sticky left-0 bg-blue-900 z-40 w-56 uppercase tracking-widest shadow-md">Nama Siswa</th>
 {indicators.map(ind => (
 <th key={ind.id} className="px-2 py-3 text-center font-bold text-[8px] uppercase tracking-tighter min-w-[85px] leading-tight border-r border-blue-800/20">
 {ind.label}
@@ -527,11 +672,21 @@ return (
 {classStudents.map((student, idx) => (
 <tr key={student.id} className={`${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/20' : 'bg-gray-50/40 hover:bg-blue-50/20'} animate-fade-up animate-delay-fill`} style={getStaggerStyle(idx, 35)}>
 <td className="px-4 py-2 border-r sticky left-0 bg-inherit z-10 shadow-sm">
-<div className="flex items-center justify-between">
-<span className="font-bold text-blue-900 truncate pr-2" title={student.name}>{student.name}</span>
+<div className="flex items-start justify-between gap-2">
+<div className="min-w-0 flex-1">
+<div className="flex items-center gap-2">
+<span className="font-bold text-blue-900 truncate" title={student.name}>{student.name}</span>
 <span className={`text-[8px] font-bold px-1 rounded ${student.gender === 'L' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
 {student.gender}
 </span>
+</div>
+<button
+onClick={() => handleCheckAllStudent(student)}
+className="mt-1 text-[8px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md hover:bg-emerald-100 transition-all"
+>
+Cek All
+</button>
+</div>
 </div>
 </td>
 {indicators.map(ind => {
