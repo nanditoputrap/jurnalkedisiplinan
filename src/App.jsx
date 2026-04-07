@@ -787,7 +787,7 @@ return (
 </div>
 
 <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden animate-scale-in">
-<div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] custom-scrollbar">
+<div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] custom-scrollbar pb-24">
 <table className="w-full text-left border-collapse text-[10px]">
 <thead className="bg-blue-900 text-white sticky top-0 z-30">
 <tr>
@@ -847,18 +847,20 @@ isActive
 </tbody>
 </table>
 </div>
-<div className="p-4 bg-gray-50 border-t flex flex-col items-center gap-4">
+<div className="p-4 bg-gray-50 border-t flex justify-center">
 <div className="flex gap-4 text-[9px] font-bold text-gray-400 uppercase tracking-widest">
 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-emerald-500"></div> Ya</div>
 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-white border border-gray-300"></div> Tidak</div>
 </div>
+</div>
+</div>
+<div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40">
 <button
 onClick={handleSaveJournal}
-className="bg-blue-900 hover:bg-blue-800 text-white px-10 py-3 rounded-xl text-sm font-black flex items-center gap-2 shadow-md transition-all uppercase hover:-translate-y-1 hover:shadow-xl animate-soft-pulse"
+className="bg-blue-900 hover:bg-blue-800 text-white px-5 py-3 rounded-2xl text-sm font-black flex items-center gap-2 shadow-2xl transition-all uppercase hover:-translate-y-1 hover:shadow-xl animate-soft-pulse border-4 border-white"
 >
 <Save size={16} /> Simpan
 </button>
-</div>
 </div>
 </div>
 );
