@@ -229,6 +229,13 @@ const App = () => {
   const [newClassName, setNewClassName] = useState('');
   const [newClassTeacherId, setNewClassTeacherId] = useState('');
 
+  const getAppSnapshot = () => ({
+    teachers,
+    classes,
+    students,
+    dailyLogs
+  });
+
   const exportBackup = () => {
     const backupData = {
       version: 1,
@@ -445,7 +452,7 @@ const App = () => {
         clearTimeout(syncTimeoutRef.current);
       }
     };
-  }, [teachers, classes, students, dailyLogs, hasHydratedData, isRemoteSyncAvailable]);
+  }, [teachers, classes, students, hasHydratedData, isRemoteSyncAvailable]);
 
   useEffect(() => {
     if (!hasHydratedData || !isRemoteSyncAvailable) return;
@@ -498,16 +505,55 @@ const toggleStatus = (studentId, indicatorId) => {
 const logKey = `${selectedDate}_${selectedClassId}`;
 const currentLogs = dailyLogs[logKey] || {};
 const studentLogs = currentLogs[studentId] || {};
-setDailyLogs({
+const nextValue = !studentLogs[indicatorId];
+const nextDailyLogs = {
 ...dailyLogs,
 [logKey]: {
 ...currentLogs,
 [studentId]: {
 ...studentLogs,
-[indicatorId]: !studentLogs[indicatorId]
+[indicatorId]: nextValue
 }
 }
+};
+setDailyLogs(nextDailyLogs);
+
+if (isRemoteSyncAvailable) {
+isSavingRef.current = true;
+fetch('/api/state', {
+method: 'PATCH',
+headers: {
+'Content-Type': 'application/json'
+},
+body: JSON.stringify({
+action: 'toggle-indicator',
+logKey,
+studentId,
+indicatorId,
+value: nextValue,
+snapshot: {
+...getAppSnapshot(),
+dailyLogs: nextDailyLogs
+}
+})
+})
+.then(async (response) => {
+if (!response.ok) {
+throw new Error(`Gagal sinkron ceklis (${response.status})`);
+}
+const result = await response.json();
+lastRemoteUpdatedAtRef.current = result?.updatedAt || null;
+setStorageMode('database');
+setSyncState('saved');
+})
+.catch((error) => {
+console.error('Sinkronisasi ceklis gagal.', error);
+setSyncState('error');
+})
+.finally(() => {
+isSavingRef.current = false;
 });
+}
 };
 
 const getStatus = (studentId, indicatorId) => {
@@ -524,18 +570,57 @@ const logKey = `${selectedDate}_${selectedClassId}`;
 const currentLogs = dailyLogs[logKey] || {};
 const studentLogs = currentLogs[student.id] || {};
 const nextStudentLogs = { ...studentLogs };
+const applicableIndicators = getApplicableIndicators(student);
 
-getApplicableIndicators(student).forEach(indicator => {
+applicableIndicators.forEach(indicator => {
 nextStudentLogs[indicator.id] = true;
 });
 
-setDailyLogs({
+const nextDailyLogs = {
 ...dailyLogs,
 [logKey]: {
 ...currentLogs,
 [student.id]: nextStudentLogs
 }
+};
+
+setDailyLogs(nextDailyLogs);
+
+if (isRemoteSyncAvailable) {
+isSavingRef.current = true;
+fetch('/api/state', {
+method: 'PATCH',
+headers: {
+'Content-Type': 'application/json'
+},
+body: JSON.stringify({
+action: 'check-all-indicators',
+logKey,
+studentId: student.id,
+indicatorIds: applicableIndicators.map(indicator => indicator.id),
+snapshot: {
+...getAppSnapshot(),
+dailyLogs: nextDailyLogs
+}
+})
+})
+.then(async (response) => {
+if (!response.ok) {
+throw new Error(`Gagal sinkron cek semua (${response.status})`);
+}
+const result = await response.json();
+lastRemoteUpdatedAtRef.current = result?.updatedAt || null;
+setStorageMode('database');
+setSyncState('saved');
+})
+.catch((error) => {
+console.error('Sinkronisasi cek semua gagal.', error);
+setSyncState('error');
+})
+.finally(() => {
+isSavingRef.current = false;
 });
+}
 };
 
 const handleAddTeacher = (name) => {

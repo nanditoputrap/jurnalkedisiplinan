@@ -1,4 +1,4 @@
-import { getAppState, isDatabaseConfigured, saveAppState } from '../lib/db.js';
+import { getAppState, isDatabaseConfigured, patchAppState, saveAppState } from '../lib/db.js';
 
 const isValidPayload = (payload) => {
   return Boolean(
@@ -46,6 +46,92 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ok: true,
         updatedAt: result?.updated_at || null
+      });
+    }
+
+    if (req.method === 'PATCH') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      const action = body?.action;
+      const snapshot = body?.snapshot;
+
+      if (!isValidPayload(snapshot)) {
+        return res.status(400).json({
+          error: 'Snapshot data tidak valid.'
+        });
+      }
+
+      if (action === 'toggle-indicator') {
+        const { logKey, studentId, indicatorId, value } = body;
+
+        if (!logKey || !studentId || !indicatorId || typeof value !== 'boolean') {
+          return res.status(400).json({
+            error: 'Payload toggle indikator tidak valid.'
+          });
+        }
+
+        const result = await patchAppState((payload) => {
+          const currentLogs = payload.dailyLogs?.[logKey] || {};
+          const studentLogs = currentLogs[studentId] || {};
+
+          return {
+            ...payload,
+            dailyLogs: {
+              ...payload.dailyLogs,
+              [logKey]: {
+                ...currentLogs,
+                [studentId]: {
+                  ...studentLogs,
+                  [indicatorId]: value
+                }
+              }
+            }
+          };
+        }, snapshot);
+
+        return res.status(200).json({
+          ok: true,
+          updatedAt: result?.updated_at || null
+        });
+      }
+
+      if (action === 'check-all-indicators') {
+        const { logKey, studentId, indicatorIds } = body;
+
+        if (!logKey || !studentId || !Array.isArray(indicatorIds) || indicatorIds.length === 0) {
+          return res.status(400).json({
+            error: 'Payload cek semua indikator tidak valid.'
+          });
+        }
+
+        const result = await patchAppState((payload) => {
+          const currentLogs = payload.dailyLogs?.[logKey] || {};
+          const studentLogs = currentLogs[studentId] || {};
+          const nextStudentLogs = { ...studentLogs };
+
+          indicatorIds.forEach((indicatorId) => {
+            nextStudentLogs[indicatorId] = true;
+          });
+
+          return {
+            ...payload,
+            dailyLogs: {
+              ...payload.dailyLogs,
+              [logKey]: {
+                ...currentLogs,
+                [studentId]: nextStudentLogs
+              }
+            }
+          };
+        }, snapshot);
+
+        return res.status(200).json({
+          ok: true,
+          updatedAt: result?.updated_at || null
+        });
+      }
+
+      return res.status(400).json({
+        error: 'Aksi patch tidak dikenali.'
       });
     }
 
