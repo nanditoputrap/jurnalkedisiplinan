@@ -19,7 +19,147 @@ Copy,
 Printer
 } from 'lucide-react';
 
+const MonthlyReportView = ({ classId, students, classes, teachers, dailyLogs, indicators, onClose }) => {
+  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
+
+  const activeClass = classes.find(c => c.id === classId);
+  const classStudents = students.filter(s => s.classId === classId);
+  const teacher = teachers.find(t => t.id === activeClass?.teacherId);
+  const [reportYear, reportMonthNumber] = reportMonth.split('-').map(Number);
+  const daysInMonth = new Date(reportYear, reportMonthNumber, 0).getDate();
+  const reportDates = Object.keys(dailyLogs)
+    .map(logKey => {
+      const [date, logClassId] = logKey.split('_');
+      return logClassId === classId && date.startsWith(reportMonth) ? date : null;
+    })
+    .filter(Boolean)
+    .sort();
+
+  const reportDateCount = new Set(reportDates).size;
+  const formatPercent = (value) => `${value.toFixed(1)}%`;
+
+  const monthlyData = classStudents.map(student => {
+    const studentLogs = {};
+    indicators.forEach(ind => studentLogs[ind.id] = 0);
+
+    const applicableIndicators = indicators.filter(ind => !(ind.id === 'makeup' && student.gender === 'L'));
+    const totalPossibleChecks = daysInMonth * applicableIndicators.length;
+
+    Object.keys(dailyLogs).forEach(logKey => {
+      const [date, logClassId] = logKey.split('_');
+      if (logClassId === classId && date.startsWith(reportMonth)) {
+        const log = dailyLogs[logKey];
+        if (log[student.id]) {
+          indicators.forEach(ind => {
+            if (log[student.id][ind.id]) {
+              studentLogs[ind.id]++;
+            }
+          });
+        }
+      }
+    });
+
+    const percentageLogs = indicators.reduce((acc, ind) => {
+      const isExcluded = ind.id === 'makeup' && student.gender === 'L';
+
+      if (isExcluded || totalPossibleChecks === 0) {
+        acc[ind.id] = null;
+        return acc;
+      }
+
+      acc[ind.id] = (studentLogs[ind.id] / totalPossibleChecks) * 100;
+      return acc;
+    }, {});
+
+    const totalPercentage = applicableIndicators.reduce((sum, ind) => {
+      return sum + (percentageLogs[ind.id] || 0);
+    }, 0);
+
+    return {
+      ...student,
+      logs: studentLogs,
+      percentageLogs,
+      totalPercentage,
+      applicableIndicatorCount: applicableIndicators.length
+    };
+  });
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4 animate-fade-in print:bg-white print:p-0 print:items-start print:justify-start">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col max-h-[90vh] animate-scale-in print:shadow-none print:rounded-none print:max-h-full print:w-full">
+        <header className="p-4 border-b flex items-center justify-between no-print">
+          <div className="flex items-center gap-4">
+            <h3 className="text-lg font-black text-blue-900">Laporan Bulanan: Kelas {activeClass?.name}</h3>
+            <input
+              type="month"
+              value={reportMonth}
+              onChange={(e) => setReportMonth(e.target.value)}
+              className="bg-gray-100 border border-gray-200 rounded-lg px-3 py-1 text-sm font-bold"
+            />
+          </div>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X size={18} /></button>
+        </header>
+        <main id="printable-area" className="flex-1 overflow-y-auto p-6 custom-scrollbar print:overflow-visible print:p-4">
+          <div className="mb-6 text-center">
+            <h1 className="text-xl font-bold">JURNAL KEDISIPLINAN SISWA</h1>
+            <h2 className="text-lg font-semibold">SMPIT IKHTIAR</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-x-8 text-sm mb-6 print:grid-cols-2">
+            <p><span className="font-bold w-24 inline-block">Kelas</span>: {activeClass?.name}</p>
+            <p><span className="font-bold w-24 inline-block">Wali Kelas</span>: {teacher?.name}</p>
+            <p><span className="font-bold w-24 inline-block">Bulan</span>: {new Date(reportMonth).toLocaleString('id-ID', { month: 'long', year: 'numeric' })}</p>
+            <p><span className="font-bold w-24 inline-block">Jumlah Siswa</span>: {classStudents.length}</p>
+            <p><span className="font-bold w-24 inline-block">Hari Bulan Ini</span>: {daysInMonth}</p>
+            <p><span className="font-bold w-24 inline-block">Hari Dicatat</span>: {reportDateCount}</p>
+          </div>
+          <table className="w-full text-left border-collapse text-xs">
+            <thead className="bg-gray-100 print:bg-gray-100">
+              <tr>
+                <th className="p-2 border font-bold text-gray-700 w-1/4">Nama Siswa</th>
+                {indicators.map(ind => <th key={ind.id} className="p-2 border font-bold text-gray-700 text-center text-[10px]">{ind.label}</th>)}
+                <th className="p-2 border font-bold text-gray-700 text-center">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {monthlyData.map(student => {
+                return (
+                  <tr key={student.id} className="even:bg-gray-50">
+                    <td className="p-2 border font-semibold">{student.name}</td>
+                    {indicators.map(ind => (
+                      <td key={ind.id} className="p-2 border text-center">
+                        {student.percentageLogs[ind.id] === null ? '-' : (student.logs[ind.id] > 0 ? student.logs[ind.id] : '-')}
+                      </td>
+                    ))}
+                    <td className="p-2 border text-center font-bold">
+                      {student.applicableIndicatorCount > 0 && daysInMonth > 0 ? formatPercent(student.totalPercentage) : '-'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </main>
+        <footer className="p-4 border-t flex justify-end gap-3 no-print">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-bold rounded-lg hover:bg-gray-100">Tutup</button>
+          <button onClick={handlePrint} className="bg-blue-900 text-white px-6 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
+            <Printer size={16} />
+            Cetak
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+};
+
 const App = () => {
+  const getStaggerStyle = (index, step = 70) => ({
+    animationDelay: `${index * step}ms`
+  });
+
   const getInitialState = (key, defaultValue) => {
     try {
       const saved = localStorage.getItem(key);
@@ -261,12 +401,12 @@ if (type === 'student') setStudents(students.filter(s => s.id !== id));
 };
 
 // --- UI COMPONENTS ---
-const TopHeader = () => (
+const renderTopHeader = () => (
 <header className="bg-blue-900 text-white shadow-md sticky top-0 z-50">
 <div className="max-w-full mx-auto px-4 sm:px-6">
 <div className="flex items-center justify-between h-14">
 <div className="flex items-center gap-3">
-<div className="bg-white p-1 rounded-full">
+<div className="bg-white p-1 rounded-full animate-soft-float">
 <GraduationCap className="text-blue-900" size={20} />
 </div>
 <h1 className="text-sm font-bold tracking-tight hidden sm:block">SMPIT IKHTIAR UNHAS</h1>
@@ -310,7 +450,7 @@ title="Pulihkan data dari backup"
 </header>
 );
 
-const HomeView = () => (
+const renderHomeView = () => (
 <div className="max-w-7xl mx-auto p-6">
 <div className="mb-6">
 <h2 className="text-xl font-extrabold text-blue-900">Pilih Kelas</h2>
@@ -321,7 +461,8 @@ const HomeView = () => (
 <button
 key={c.id}
 onClick={() => { setSelectedClassId(c.id); setCurrentView('journal'); }}
-className="group bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:border-gold transition-all hover:shadow-md text-left"
+className="group bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:border-gold transition-all hover:shadow-md hover:-translate-y-1 text-left animate-fade-up animate-delay-fill"
+style={getStaggerStyle(classes.findIndex(item => item.id === c.id))}
 >
 <div className="w-10 h-10 bg-blue-50 text-blue-900 rounded-xl flex items-center justify-center mb-3 group-hover:bg-gold group-hover:text-white transition-colors">
 <BookOpen size={20} />
@@ -334,15 +475,15 @@ className="group bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover
 </div>
 );
 
-const JournalTableView = () => {
+const renderJournalTableView = () => {
 const activeClass = classes.find(c => c.id === selectedClassId);
 const classStudents = students.filter(s => s.classId === selectedClassId);
 
 return (
-<div className="max-w-full mx-auto p-4">
-<div className="flex flex-wrap items-center justify-between mb-4 gap-3 bg-white p-3 rounded-xl shadow-sm border">
+<div className="max-w-full mx-auto p-4 animate-fade-up">
+<div className="flex flex-wrap items-center justify-between mb-4 gap-3 bg-white p-3 rounded-xl shadow-sm border animate-fade-up">
 <div className="flex items-center gap-3">
-<button onClick={() => setCurrentView('home')} className="p-2 bg-blue-50 text-blue-900 rounded-lg hover:bg-blue-100">
+<button onClick={() => setCurrentView('home')} className="p-2 bg-blue-50 text-blue-900 rounded-lg hover:bg-blue-100 transition-all hover:-translate-x-1">
 <ArrowLeft size={18} />
 </button>
 <h2 className="text-sm font-black text-blue-900 uppercase">Jurnal Kelas {activeClass?.name}</h2>
@@ -359,7 +500,7 @@ return (
         </div>
         <button 
           onClick={() => setIsReportViewOpen(true)}
-          className="flex items-center gap-2 text-xs font-bold bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg border border-gray-200"
+          className="flex items-center gap-2 text-xs font-bold bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg border border-gray-200 transition-all hover:-translate-y-0.5 hover:shadow-sm"
         >
           <Printer size={14} />
           <span>Laporan</span>
@@ -367,7 +508,7 @@ return (
       </div>
 </div>
 
-<div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+<div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden animate-scale-in">
 <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] custom-scrollbar">
 <table className="w-full text-left border-collapse text-[10px]">
 <thead className="bg-blue-900 text-white sticky top-0 z-30">
@@ -382,7 +523,7 @@ return (
 </thead>
 <tbody className="divide-y divide-gray-100">
 {classStudents.map((student, idx) => (
-<tr key={student.id} className={idx % 2 === 0 ? 'bg-white hover:bg-blue-50/20' : 'bg-gray-50/40 hover:bg-blue-50/20'}>
+<tr key={student.id} className={`${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/20' : 'bg-gray-50/40 hover:bg-blue-50/20'} animate-fade-up animate-delay-fill`} style={getStaggerStyle(idx, 35)}>
 <td className="px-4 py-2 border-r sticky left-0 bg-inherit z-10 shadow-sm">
 <div className="flex items-center justify-between">
 <span className="font-bold text-blue-900 truncate pr-2" title={student.name}>{student.name}</span>
@@ -401,9 +542,9 @@ return (
 ) : (
 <button
 onClick={() => toggleStatus(student.id, ind.id)}
-className={`w-7 h-7 rounded-lg flex items-center justify-center mx-auto transition-all transform active:scale-90 border ${
+className={`w-7 h-7 rounded-lg flex items-center justify-center mx-auto transition-all transform active:scale-90 hover:-translate-y-0.5 border ${
 isActive
-? `${ind.color} text-white shadow-sm border-transparent`
+? `${ind.color} text-white shadow-sm border-transparent animate-status-pop`
 : 'bg-white border-gray-200 text-gray-200 hover:border-gray-400'
 }`}
 >
@@ -425,7 +566,7 @@ isActive
 </div>
 <button
 onClick={() => { alert("Data tersimpan!"); setCurrentView('home'); }}
-className="bg-blue-900 hover:bg-blue-800 text-white px-10 py-3 rounded-xl text-sm font-black flex items-center gap-2 shadow-md transition-all uppercase"
+className="bg-blue-900 hover:bg-blue-800 text-white px-10 py-3 rounded-xl text-sm font-black flex items-center gap-2 shadow-md transition-all uppercase hover:-translate-y-1 hover:shadow-xl animate-soft-pulse"
 >
 <Save size={16} /> Simpan
 </button>
@@ -435,150 +576,14 @@ className="bg-blue-900 hover:bg-blue-800 text-white px-10 py-3 rounded-xl text-s
 );
 };
 
-const MonthlyReportView = ({ classId, students, classes, teachers, dailyLogs, indicators, onClose }) => {
-  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
-
-  const activeClass = classes.find(c => c.id === classId);
-  const classStudents = students.filter(s => s.classId === classId);
-  const teacher = teachers.find(t => t.id === activeClass?.teacherId);
-  const [reportYear, reportMonthNumber] = reportMonth.split('-').map(Number);
-  const daysInMonth = new Date(reportYear, reportMonthNumber, 0).getDate();
-  const reportDates = Object.keys(dailyLogs)
-    .map(logKey => {
-      const [date, logClassId] = logKey.split('_');
-      return logClassId === classId && date.startsWith(reportMonth) ? date : null;
-    })
-    .filter(Boolean)
-    .sort();
-
-  const reportDateCount = new Set(reportDates).size;
-  const formatPercent = (value) => `${value.toFixed(1)}%`;
-
-  const monthlyData = classStudents.map(student => {
-    const studentLogs = {};
-    indicators.forEach(ind => studentLogs[ind.id] = 0);
-
-    const applicableIndicators = indicators.filter(ind => !(ind.id === 'makeup' && student.gender === 'L'));
-    const totalPossibleChecks = daysInMonth * applicableIndicators.length;
-
-    Object.keys(dailyLogs).forEach(logKey => {
-      const [date, logClassId] = logKey.split('_');
-      if (logClassId === classId && date.startsWith(reportMonth)) {
-        const log = dailyLogs[logKey];
-        if (log[student.id]) {
-          indicators.forEach(ind => {
-            if (log[student.id][ind.id]) {
-              studentLogs[ind.id]++;
-            }
-          });
-        }
-      }
-    });
-
-    const percentageLogs = indicators.reduce((acc, ind) => {
-      const isExcluded = ind.id === 'makeup' && student.gender === 'L';
-
-      if (isExcluded || totalPossibleChecks === 0) {
-        acc[ind.id] = null;
-        return acc;
-      }
-
-      acc[ind.id] = (studentLogs[ind.id] / totalPossibleChecks) * 100;
-      return acc;
-    }, {});
-
-    const totalPercentage = applicableIndicators.reduce((sum, ind) => {
-      return sum + (percentageLogs[ind.id] || 0);
-    }, 0);
-
-    return {
-      ...student,
-      logs: studentLogs,
-      percentageLogs,
-      totalPercentage,
-      applicableIndicatorCount: applicableIndicators.length
-    };
-  });
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4 print:bg-white print:p-0 print:items-start print:justify-start">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col max-h-[90vh] print:shadow-none print:rounded-none print:max-h-full print:w-full">
-        <header className="p-4 border-b flex items-center justify-between no-print">
-          <div className="flex items-center gap-4">
-            <h3 className="text-lg font-black text-blue-900">Laporan Bulanan: Kelas {activeClass?.name}</h3>
-            <input 
-              type="month"
-              value={reportMonth}
-              onChange={(e) => setReportMonth(e.target.value)}
-              className="bg-gray-100 border border-gray-200 rounded-lg px-3 py-1 text-sm font-bold"
-            />
-          </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X size={18} /></button>
-        </header>
-        <main id="printable-area" className="flex-1 overflow-y-auto p-6 custom-scrollbar print:overflow-visible print:p-4">
-           <div className="mb-6 text-center">
-              <h1 className="text-xl font-bold">JURNAL KEDISIPLINAN SISWA</h1>
-              <h2 className="text-lg font-semibold">SMPIT IKHTIAR</h2>
-           </div>
-           <div className="grid grid-cols-2 gap-x-8 text-sm mb-6 print:grid-cols-2">
-              <p><span className="font-bold w-24 inline-block">Kelas</span>: {activeClass?.name}</p>
-              <p><span className="font-bold w-24 inline-block">Wali Kelas</span>: {teacher?.name}</p>
-              <p><span className="font-bold w-24 inline-block">Bulan</span>: {new Date(reportMonth).toLocaleString('id-ID', { month: 'long', year: 'numeric' })}</p>
-              <p><span className="font-bold w-24 inline-block">Jumlah Siswa</span>: {classStudents.length}</p>
-              <p><span className="font-bold w-24 inline-block">Hari Bulan Ini</span>: {daysInMonth}</p>
-              <p><span className="font-bold w-24 inline-block">Hari Dicatat</span>: {reportDateCount}</p>
-            </div>
-          <table className="w-full text-left border-collapse text-xs">
-            <thead className="bg-gray-100 print:bg-gray-100">
-              <tr>
-                <th className="p-2 border font-bold text-gray-700 w-1/4">Nama Siswa</th>
-                {indicators.map(ind => <th key={ind.id} className="p-2 border font-bold text-gray-700 text-center text-[10px]">{ind.label}</th>)}
-                <th className="p-2 border font-bold text-gray-700 text-center">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monthlyData.map(student => {
-                return (
-                  <tr key={student.id} className="even:bg-gray-50">
-                    <td className="p-2 border font-semibold">{student.name}</td>
-                    {indicators.map(ind => (
-                      <td key={ind.id} className="p-2 border text-center">
-                        {student.percentageLogs[ind.id] === null ? '-' : (student.logs[ind.id] > 0 ? student.logs[ind.id] : '-')}
-                      </td>
-                    ))}
-                    <td className="p-2 border text-center font-bold">
-                      {student.applicableIndicatorCount > 0 && daysInMonth > 0 ? formatPercent(student.totalPercentage) : '-'}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </main>
-        <footer className="p-4 border-t flex justify-end gap-3 no-print">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-bold rounded-lg hover:bg-gray-100">Tutup</button>
-          <button onClick={handlePrint} className="bg-blue-900 text-white px-6 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
-            <Printer size={16} />
-            Cetak
-          </button>
-        </footer>
-      </div>
-    </div>
-  )
-};
-
-const AdminView = () => (
+const renderAdminView = () => (
 <div className="max-w-7xl mx-auto p-6">
 <div className="flex space-x-1 mb-6 bg-white p-1 rounded-xl shadow-sm border inline-flex overflow-hidden">
 {['dashboard', 'guru', 'kelas'].map(tab => (
 <button
 key={tab}
 onClick={() => { setAdminTab(tab); setEditingItem(null); }}
-className={`py-1.5 px-5 font-bold text-[10px] uppercase tracking-widest rounded-lg transition-all ${adminTab === tab ? 'bg-blue-900 text-white shadow-sm' : 'text-gray-400 hover:text-blue-900'}`}
+className={`py-1.5 px-5 font-bold text-[10px] uppercase tracking-widest rounded-lg ${adminTab === tab ? 'bg-blue-900 text-white shadow-sm' : 'text-gray-400 hover:text-blue-900'}`}
 >
 {tab}
 </button>
@@ -592,7 +597,7 @@ className={`py-1.5 px-5 font-bold text-[10px] uppercase tracking-widest rounded-
 { label: 'Kelas', val: classes.length, icon: BookOpen, col: 'border-gold' },
 { label: 'Siswa', val: students.length, icon: UserCheck, col: 'border-emerald-500' }
 ].map((s, i) => (
-<div key={i} className={`bg-white p-5 rounded-2xl shadow border-l-4 ${s.col}`}>
+<div key={i} className={`bg-white p-5 rounded-2xl shadow border-l-4 animate-fade-up animate-delay-fill hover:-translate-y-1 transition-all ${s.col}`} style={getStaggerStyle(i)}>
 <p className="text-gray-400 text-[9px] font-bold uppercase tracking-widest">{s.label}</p>
 <h4 className="text-2xl font-black text-blue-900 mt-1">{s.val}</h4>
 </div>
@@ -602,7 +607,7 @@ className={`py-1.5 px-5 font-bold text-[10px] uppercase tracking-widest rounded-
 
 {adminTab === 'guru' && (
 <div className="space-y-4 max-w-2xl">
-<div className="bg-white p-4 rounded-xl shadow-sm flex gap-2 border border-gray-100">
+<div className="bg-white p-4 rounded-xl shadow-sm flex gap-2 border border-gray-100 animate-fade-up">
 <input
 type="text"
 placeholder="Nama Guru..."
@@ -612,12 +617,12 @@ onChange={(e) => setNewInput(e.target.value)}
 />
 <button
 onClick={() => { handleAddTeacher(newInput); setNewInput(''); }}
-className="bg-blue-900 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase"
+className="bg-blue-900 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all hover:-translate-y-0.5 hover:shadow-md"
 >
 Tambah
 </button>
 </div>
-<div className="bg-white rounded-xl shadow-sm overflow-hidden border">
+<div className="bg-white rounded-xl shadow-sm overflow-hidden border animate-scale-in">
 <table className="w-full text-left text-xs">
 <tbody className="divide-y">
 {teachers.map(t => (
@@ -642,7 +647,7 @@ Tambah
 {adminTab === 'kelas' && (
 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 {classes.map(c => (
-<div key={c.id} className="bg-white rounded-2xl shadow-sm overflow-hidden border-t-4 border-blue-900 flex flex-col h-fit">
+<div key={c.id} className="bg-white rounded-2xl shadow-sm overflow-hidden border-t-4 border-blue-900 flex flex-col h-fit animate-fade-up animate-delay-fill hover:-translate-y-1 transition-all" style={getStaggerStyle(classes.findIndex(item => item.id === c.id))}>
 <div className="p-4 bg-gray-50/50 flex justify-between items-center border-b">
 <div>
 <h5 className="font-black text-blue-900 text-sm tracking-tight">KELAS {c.name}</h5>
@@ -718,11 +723,11 @@ return (
         className="hidden"
       />
       <div className="non-printable">
-        <TopHeader />
+        {renderTopHeader()}
         <main>
-          {currentView === 'home' && <HomeView />}
-          {currentView === 'journal' && <JournalTableView />}
-          {currentView === 'admin' && <AdminView />}
+          {currentView === 'home' && renderHomeView()}
+          {currentView === 'journal' && renderJournalTableView()}
+          {currentView === 'admin' && renderAdminView()}
         </main>
       </div>
       <div className="printable-container">
